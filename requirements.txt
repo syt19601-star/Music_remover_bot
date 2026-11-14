@@ -1,4 +1,4 @@
 aiogram>=3.10.0
-gradio_client
+gradio_client==0.6.1
 aiohttp
 websockets
