@@ -1,6 +1,7 @@
 import os
 import requests
 import asyncio
+import replicate
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
@@ -8,15 +9,10 @@ from aiogram.types import LabeledPrice, PreCheckoutQuery, FSInputFile
 import database as db
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 db.init_db()
-
-# استخدام نموذج عزل الصوت الرسمي عبر واجهة Hugging Face المباشرة
-API_URL = "https://huggingface.co"
-headers = {"Authorization": f"Bearer {HF_TOKEN}"}
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -40,30 +36,36 @@ async def handle_audio(message: types.Message):
         await send_stars_invoice(message)
         return
 
-    wait_msg = await message.answer("جاري تحميل المقطع وعزل الموسيقى، يرجى الانتظار...")
+    wait_msg = await message.answer("جاري عزل الموسيقى بجودة استوديو، يستغرق هذا حوالي 15 ثانية...")
 
     try:
         file_id = message.audio.file_id if message.audio else message.voice.file_id
         file = await bot.get_file(file_id)
         input_path = f"input_{user_id}.mp3"
-        output_path = f"vocals_{user_id}.wav"
+        output_path = f"vocals_{user_id}.mp3"
         await bot.download_file(file.file_path, input_path)
 
-        with open(input_path, "rb") as f:
-            audio_data = f.read()
+        def run_demucs():
+            with open(input_path, "rb") as audio_file:
+                output = replicate.run(
+                    "cjwbw/demucs:25a173108cff36ef9f80f854c162d01df9e6528be175794b81158fa03836d953",
+                    input={
+                        "audio": audio_file,
+                        "stem": "vocals",
+                        "output_format": "mp3"
+                    }
+                )
+            return output
 
-        # إرسال الملف الصوتي للمعالجة في خيط منفصل حتى لا يتجمد البوت
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None,
-            lambda: requests.post(API_URL, headers=headers, data=audio_data, timeout=120)
-        )
+        result = await loop.run_in_executor(None, run_demucs)
 
-        if response.status_code != 200:
-            raise ValueError(f"استجابة الخادم ({response.status_code}): {response.text[:200]}")
-
+        # استخراج رابط ملف الصوت البشري وتحميله
+        vocals_url = result.get("vocals") if isinstance(result, dict) else str(result)
+        
+        r = await loop.run_in_executor(None, lambda: requests.get(vocals_url))
         with open(output_path, "wb") as f:
-            f.write(response.content)
+            f.write(r.content)
 
         db.use_credit(user_id)
         new_credits = db.get_credits(user_id)
