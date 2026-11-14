@@ -44,7 +44,7 @@ async def handle_audio(message: types.Message):
         input_path = f"input_{user_id}.mp3"
         await bot.download_file(file.file_path, input_path)
 
-        client = Client("Eddycrack864/UVR5", token=HF_TOKEN)
+        client = Client("Eddycrack864/UVR5", hf_token=HF_TOKEN)
         result = client.predict(
             input_path,
             "vocal_output",
