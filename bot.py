@@ -8,7 +8,6 @@ from gradio_client import Client, handle_file
 import database as db
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-HF_TOKEN = os.getenv("HF_TOKEN")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -44,7 +43,7 @@ async def handle_audio(message: types.Message):
         input_path = f"input_{user_id}.mp3"
         await bot.download_file(file.file_path, input_path)
 
-        client = Client("https://hf.space")
+        client = Client("nakas/demucs-playground")
         result = client.predict(
             handle_file(input_path),
             api_name="/predict"
