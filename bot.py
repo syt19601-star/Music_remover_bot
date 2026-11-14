@@ -8,6 +8,7 @@ from gradio_client import Client, handle_file
 import database as db
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+HF_TOKEN = os.getenv("HF_TOKEN")
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
@@ -17,7 +18,7 @@ db.init_db()
 async def cmd_start(message: types.Message):
     credits = db.get_credits(message.from_user.id)
     if isinstance(credits, tuple):
-        credits = credits[0]
+        credits = credits
     await message.answer(
         f"أهلاً بك في بوت عزل الموسيقى!\n"
         f"أرسل لي أي مقطع صوتي أو أغنية وسأقوم بفصل الصوت البشري عن الموسيقى.\n\n"
@@ -29,7 +30,7 @@ async def handle_audio(message: types.Message):
     user_id = message.from_user.id
     credits = db.get_credits(user_id)
     if isinstance(credits, tuple):
-        credits = credits[0]
+        credits = credits
 
     if credits <= 0:
         await send_stars_invoice(message)
@@ -43,7 +44,7 @@ async def handle_audio(message: types.Message):
         input_path = f"input_{user_id}.mp3"
         await bot.download_file(file.file_path, input_path)
 
-        client = Client("https://hf.space")
+        client = Client("Eddycrack864/UVR5", token=HF_TOKEN)
         result = client.predict(
             handle_file(input_path),
             "vocal_output",
@@ -54,12 +55,12 @@ async def handle_audio(message: types.Message):
             fn_index=6
         )
         
-        vocals_path = result[0] if isinstance(result, (list, tuple)) else result
+        vocals_path = result if isinstance(result, (list, tuple)) else result
 
         db.use_credit(user_id)
         new_credits = db.get_credits(user_id)
         if isinstance(new_credits, tuple):
-            new_credits = new_credits[0]
+            new_credits = new_credits
         
         await message.answer_audio(
             FSInputFile(vocals_path),
@@ -94,7 +95,7 @@ async def successful_payment_handler(message: types.Message):
         db.add_credits(message.from_user.id, 5)
         new_credits = db.get_credits(message.from_user.id)
         if isinstance(new_credits, tuple):
-            new_credits = new_credits[0]
+            new_credits = new_credits
         await message.answer(f"شكراً لك! تم شحن 5 محاولات بنجاح. رصيدك الحالي: {new_credits}.")
 
 async def handle_ping(request):
