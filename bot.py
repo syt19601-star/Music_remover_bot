@@ -17,6 +17,8 @@ db.init_db()
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     credits = db.get_credits(message.from_user.id)
+    if isinstance(credits, tuple):
+        credits = credits[0]
     await message.answer(
         f"أهلاً بك في بوت عزل الموسيقى!\n"
         f"أرسل لي أي مقطع صوتي أو أغنية وسأقوم بفصل الصوت البشري عن الموسيقى.\n\n"
@@ -27,6 +29,8 @@ async def cmd_start(message: types.Message):
 async def handle_audio(message: types.Message):
     user_id = message.from_user.id
     credits = db.get_credits(user_id)
+    if isinstance(credits, tuple):
+        credits = credits[0]
 
     if credits <= 0:
         await send_stars_invoice(message)
@@ -50,6 +54,8 @@ async def handle_audio(message: types.Message):
 
         db.use_credit(user_id)
         new_credits = db.get_credits(user_id)
+        if isinstance(new_credits, tuple):
+            new_credits = new_credits[0]
         
         await message.answer_audio(
             FSInputFile(vocals_path),
@@ -60,8 +66,7 @@ async def handle_audio(message: types.Message):
             os.remove(input_path)
 
     except Exception as e:
-        await message.answer("حدث خطأ أثناء المعالجة، لم يتم خصم أي محاولة. حاول مرة أخرى لاحقاً.")
-        print(f"Error: {e}")
+        await message.answer(f"حدث خطأ تقني:\n{str(e)}")
     finally:
         await wait_msg.delete()
 
@@ -84,6 +89,8 @@ async def successful_payment_handler(message: types.Message):
     if message.successful_payment.invoice_payload == "buy_5_credits":
         db.add_credits(message.from_user.id, 5)
         new_credits = db.get_credits(message.from_user.id)
+        if isinstance(new_credits, tuple):
+            new_credits = new_credits[0]
         await message.answer(f"شكراً لك! تم شحن 5 محاولات بنجاح. رصيدك الحالي: {new_credits}.")
 
 async def handle_ping(request):
