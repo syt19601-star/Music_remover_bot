@@ -1,11 +1,10 @@
 import os
-import traceback
+import requests
 import asyncio
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
 from aiogram.types import LabeledPrice, PreCheckoutQuery, FSInputFile
-from gradio_client import Client
 import database as db
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -15,11 +14,15 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 db.init_db()
 
+# استخدام نموذج عزل الصوت الرسمي عبر واجهة Hugging Face المباشرة
+API_URL = "https://huggingface.co"
+headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
     credits = db.get_credits(message.from_user.id)
     if isinstance(credits, tuple):
-        credits = credits[0]
+        credits = credits
     await message.answer(
         f"أهلاً بك في بوت عزل الموسيقى!\n"
         f"أرسل لي أي مقطع صوتي أو أغنية وسأقوم بفصل الصوت البشري عن الموسيقى.\n\n"
@@ -31,55 +34,54 @@ async def handle_audio(message: types.Message):
     user_id = message.from_user.id
     credits = db.get_credits(user_id)
     if isinstance(credits, tuple):
-        credits = credits[0]
+        credits = credits
 
     if credits <= 0:
         await send_stars_invoice(message)
         return
 
-    wait_msg = await message.answer("جاري تحميل المقطع وعزل الموسيقى بالذكاء الاصطناعي، يرجى الانتظار...")
+    wait_msg = await message.answer("جاري تحميل المقطع وعزل الموسيقى، يرجى الانتظار...")
 
     try:
         file_id = message.audio.file_id if message.audio else message.voice.file_id
         file = await bot.get_file(file_id)
         input_path = f"input_{user_id}.mp3"
+        output_path = f"vocals_{user_id}.wav"
         await bot.download_file(file.file_path, input_path)
 
-        client = Client("Eddycrack864/UVR5", hf_token=HF_TOKEN)
-        result = client.predict(
-            input_path,
-            "vocal_output",
-            "1_HP-UVR,1_HP-UVR",
-            "VR Arc,VR Arc",
-            "320,320",
-            "1.1",
-            fn_index=6
-        )
-        
-        if not result:
-            raise ValueError("الخادم أعاد نتيجة فارغة، قد يكون مشغولاً أو الملف طويلاً جداً.")
+        with open(input_path, "rb") as f:
+            audio_data = f.read()
 
-        vocals_path = result[0] if isinstance(result, (list, tuple)) else result
-        if not vocals_path or not os.path.exists(str(vocals_path)):
-            raise ValueError(f"لم يتم العثور على الملف الصوتي في النتيجة: {result}")
+        # إرسال الملف الصوتي للمعالجة في خيط منفصل حتى لا يتجمد البوت
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None,
+            lambda: requests.post(API_URL, headers=headers, data=audio_data, timeout=120)
+        )
+
+        if response.status_code != 200:
+            raise ValueError(f"استجابة الخادم ({response.status_code}): {response.text[:200]}")
+
+        with open(output_path, "wb") as f:
+            f.write(response.content)
 
         db.use_credit(user_id)
         new_credits = db.get_credits(user_id)
         if isinstance(new_credits, tuple):
-            new_credits = new_credits[0]
+            new_credits = new_credits
         
         await message.answer_audio(
-            FSInputFile(vocals_path),
+            FSInputFile(output_path),
             caption=f"تم عزل الصوت بنجاح!\nرصيدك المتبقي: {new_credits} محاولات."
         )
         
         if os.path.exists(input_path):
             os.remove(input_path)
+        if os.path.exists(output_path):
+            os.remove(output_path)
 
     except Exception as e:
-        err_details = traceback.format_exc()
-        print(err_details)
-        await message.answer(f"حدث خطأ تقني:\n{repr(e)}")
+        await message.answer(f"حدث خطأ تقني:\n{str(e)}")
     finally:
         await wait_msg.delete()
 
@@ -103,7 +105,7 @@ async def successful_payment_handler(message: types.Message):
         db.add_credits(message.from_user.id, 5)
         new_credits = db.get_credits(message.from_user.id)
         if isinstance(new_credits, tuple):
-            new_credits = new_credits[0]
+            new_credits = new_credits
         await message.answer(f"شكراً لك! تم شحن 5 محاولات بنجاح. رصيدك الحالي: {new_credits}.")
 
 async def handle_ping(request):
