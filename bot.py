@@ -43,11 +43,15 @@ async def handle_audio(message: types.Message):
         input_path = f"input_{user_id}.mp3"
         await bot.download_file(file.file_path, input_path)
 
-        client = Client("JacobLinCool/vocal-separation")
+        client = Client("https://hf.space")
         result = client.predict(
-            audio_file=handle_file(input_path),
-            model_name="htdemucs",
-            api_name="/separate"
+            handle_file(input_path),
+            "vocal_output",
+            "1_HP-UVR,1_HP-UVR",
+            "VR Arc,VR Arc",
+            "320,320",
+            "1.1",
+            fn_index=6
         )
         
         vocals_path = result[0] if isinstance(result, (list, tuple)) else result
