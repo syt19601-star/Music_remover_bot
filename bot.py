@@ -1,4 +1,5 @@
 import os
+import traceback
 import asyncio
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
@@ -18,7 +19,7 @@ db.init_db()
 async def cmd_start(message: types.Message):
     credits = db.get_credits(message.from_user.id)
     if isinstance(credits, tuple):
-        credits = credits
+        credits = credits[0]
     await message.answer(
         f"أهلاً بك في بوت عزل الموسيقى!\n"
         f"أرسل لي أي مقطع صوتي أو أغنية وسأقوم بفصل الصوت البشري عن الموسيقى.\n\n"
@@ -30,7 +31,7 @@ async def handle_audio(message: types.Message):
     user_id = message.from_user.id
     credits = db.get_credits(user_id)
     if isinstance(credits, tuple):
-        credits = credits
+        credits = credits[0]
 
     if credits <= 0:
         await send_stars_invoice(message)
@@ -55,12 +56,17 @@ async def handle_audio(message: types.Message):
             fn_index=6
         )
         
-        vocals_path = result if isinstance(result, (list, tuple)) else result
+        if not result:
+            raise ValueError("الخادم أعاد نتيجة فارغة، قد يكون مشغولاً أو الملف طويلاً جداً.")
+
+        vocals_path = result[0] if isinstance(result, (list, tuple)) else result
+        if not vocals_path or not os.path.exists(str(vocals_path)):
+            raise ValueError(f"لم يتم العثور على الملف الصوتي في النتيجة: {result}")
 
         db.use_credit(user_id)
         new_credits = db.get_credits(user_id)
         if isinstance(new_credits, tuple):
-            new_credits = new_credits
+            new_credits = new_credits[0]
         
         await message.answer_audio(
             FSInputFile(vocals_path),
@@ -71,7 +77,9 @@ async def handle_audio(message: types.Message):
             os.remove(input_path)
 
     except Exception as e:
-        await message.answer(f"حدث خطأ تقني:\n{str(e)}")
+        err_details = traceback.format_exc()
+        print(err_details)
+        await message.answer(f"حدث خطأ تقني:\n{repr(e)}")
     finally:
         await wait_msg.delete()
 
@@ -95,7 +103,7 @@ async def successful_payment_handler(message: types.Message):
         db.add_credits(message.from_user.id, 5)
         new_credits = db.get_credits(message.from_user.id)
         if isinstance(new_credits, tuple):
-            new_credits = new_credits
+            new_credits = new_credits[0]
         await message.answer(f"شكراً لك! تم شحن 5 محاولات بنجاح. رصيدك الحالي: {new_credits}.")
 
 async def handle_ping(request):
