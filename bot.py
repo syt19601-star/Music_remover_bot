@@ -4,7 +4,7 @@ from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
 from aiogram.types import LabeledPrice, PreCheckoutQuery, FSInputFile
-from gradio_client import Client, handle_file
+from gradio_client import Client
 import database as db
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -46,7 +46,7 @@ async def handle_audio(message: types.Message):
 
         client = Client("Eddycrack864/UVR5", token=HF_TOKEN)
         result = client.predict(
-            handle_file(input_path),
+            input_path,
             "vocal_output",
             "1_HP-UVR,1_HP-UVR",
             "VR Arc,VR Arc",
