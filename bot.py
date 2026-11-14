@@ -32,7 +32,7 @@ async def handle_audio(message: types.Message):
         await send_stars_invoice(message)
         return
 
-    wait_msg = await message.answer("جاري تحميل المقطع وعزل الموسيقى، قد يستغرق هذا دقيقة...")
+    wait_msg = await message.answer("جاري تحميل المقطع وعزل الموسيقى بالذكاء الاصطناعي، يرجى الانتظار...")
 
     try:
         file_id = message.audio.file_id if message.audio else message.voice.file_id
@@ -40,22 +40,22 @@ async def handle_audio(message: types.Message):
         input_path = f"input_{user_id}.mp3"
         await bot.download_file(file.file_path, input_path)
 
-        client = Client("abidlabs/music-separation", hf_token=HF_TOKEN)
+        client = Client("nakas/Demucs_V4", hf_token=HF_TOKEN)
         result = client.predict(
             handle_file(input_path),
             api_name="/predict"
         )
-
+        
         vocals_path = result[0] if isinstance(result, (list, tuple)) else result
 
         db.use_credit(user_id)
         new_credits = db.get_credits(user_id)
-
+        
         await message.answer_audio(
             FSInputFile(vocals_path),
             caption=f"تم عزل الصوت بنجاح!\nرصيدك المتبقي: {new_credits} محاولات."
         )
-
+        
         if os.path.exists(input_path):
             os.remove(input_path)
 
