@@ -43,7 +43,7 @@ async def handle_audio(message: types.Message):
         input_path = f"input_{user_id}.mp3"
         await bot.download_file(file.file_path, input_path)
 
-        client = Client("nakas/demucs-playground")
+        client = Client("https://hf.space")
         result = client.predict(
             handle_file(input_path),
             api_name="/predict"
