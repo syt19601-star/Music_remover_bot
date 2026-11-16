@@ -5,7 +5,6 @@ import replicate
 from aiohttp import web
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import CommandStart
-from aiogram.types import LabeledPrice, PreCheckoutQuery, FSInputFile
 import database as db
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -18,11 +17,11 @@ db.init_db()
 async def cmd_start(message: types.Message):
     credits = db.get_credits(message.from_user.id)
     if isinstance(credits, tuple):
-        credits = credits
+        credits = credits[0]
     await message.answer(
-        f"أهلاً بك في بوت عزل الموسيقى!\n"
-        f"أرسل لي أي مقطع صوتي أو أغنية وسأقوم بفصل الصوت البشري عن الموسيقى.\n\n"
-        f"رصيدك الحالي: {credits} محاولات."
+        f"\nأهلاً بك في بوت عزل الموسيقى\n"
+        f"قوم بفصل الصوت البشري عن الموسيقى\n"
+        f"رصيدك الحالي: {credits} محاولات"
     )
 
 @dp.message(F.audio | F.voice)
@@ -30,13 +29,13 @@ async def handle_audio(message: types.Message):
     user_id = message.from_user.id
     credits = db.get_credits(user_id)
     if isinstance(credits, tuple):
-        credits = credits
+        credits = credits[0]
 
     if credits <= 0:
-        await send_stars_invoice(message)
+        await message.answer("عذراً، نفدت محاولاتك المجانية.")
         return
 
-    wait_msg = await message.answer("جاري عزل الموسيقى بجودة استوديو، يستغرق هذا حوالي 15 ثانية...")
+    wait_msg = await message.answer("جاري معالجة الصوت...")
 
     try:
         file_id = message.audio.file_id if message.audio else message.voice.file_id
@@ -45,73 +44,49 @@ async def handle_audio(message: types.Message):
         output_path = f"vocals_{user_id}.mp3"
         await bot.download_file(file.file_path, input_path)
 
-        def run_demucs():
+        def run_replicate():
             with open(input_path, "rb") as audio_file:
                 output = replicate.run(
-                    "cjwbw/demucs:25a173108cff36ef9f80f854c162d01df9e6528be175794b81158fa03836d953",
+                    "cjwbw/demucs:25a7d3c68380155b1f50a16c7cfccf30f576e107df2a6fdf9a349bc9e5c54508",
                     input={
                         "audio": audio_file,
                         "stem": "vocals",
                         "output_format": "mp3"
                     }
                 )
-            return output
+                return output
 
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, run_demucs)
-
-        # استخراج رابط ملف الصوت البشري وتحميله
-        vocals_url = result.get("vocals") if isinstance(result, dict) else str(result)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, run_replicate)
         
-        r = await loop.run_in_executor(None, lambda: requests.get(vocals_url))
+        vocals_url = result.get("vocals")
+
+        response = requests.get(vocals_url)
         with open(output_path, "wb") as f:
-            f.write(r.content)
+            f.write(response.content)
 
         db.use_credit(user_id)
         new_credits = db.get_credits(user_id)
         if isinstance(new_credits, tuple):
-            new_credits = new_credits
-        
+            new_credits = new_credits[0]
+
         await message.answer_audio(
-            FSInputFile(output_path),
-            caption=f"تم عزل الصوت بنجاح!\nرصيدك المتبقي: {new_credits} محاولات."
+            types.FSInputFile(output_path),
+            caption=f"تم فصل الصوت بنجاح!\nرصيدك المتبقي: {new_credits}"
         )
-        
+
         if os.path.exists(input_path):
             os.remove(input_path)
         if os.path.exists(output_path):
             os.remove(output_path)
 
     except Exception as e:
-        await message.answer(f"حدث خطأ تقني:\n{str(e)}")
+        await message.answer(f"حدث خطأ ما: {e}")
     finally:
         await wait_msg.delete()
 
-async def send_stars_invoice(message: types.Message):
-    prices = [LabeledPrice(label="5 محاولات إضافية", amount=10)]
-    await message.answer_invoice(
-        title="شحن رصيد عزل الموسيقى",
-        description="لقد استنفدت محاولاتك المجانية. اشترِ 5 محاولات إضافية باستخدام نجوم تلغرام.",
-        payload="buy_5_credits",
-        currency="XTR",
-        prices=prices
-    )
-
-@dp.pre_checkout_query()
-async def pre_checkout_handler(pre_checkout_query: PreCheckoutQuery):
-    await pre_checkout_query.answer(ok=True)
-
-@dp.message(F.successful_payment)
-async def successful_payment_handler(message: types.Message):
-    if message.successful_payment.invoice_payload == "buy_5_credits":
-        db.add_credits(message.from_user.id, 5)
-        new_credits = db.get_credits(message.from_user.id)
-        if isinstance(new_credits, tuple):
-            new_credits = new_credits
-        await message.answer(f"شكراً لك! تم شحن 5 محاولات بنجاح. رصيدك الحالي: {new_credits}.")
-
 async def handle_ping(request):
-    return web.Response(text="Bot is running!")
+    return web.Response(text="Bot is running")
 
 async def main():
     app = web.Application()
@@ -125,3 +100,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    
