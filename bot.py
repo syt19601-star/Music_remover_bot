@@ -44,10 +44,10 @@ async def handle_audio(message: types.Message):
         output_path = f"vocals_{user_id}.mp3"
         await bot.download_file(file.file_path, input_path)
 
-        def run_replicate():
+              def run_replicate():
             with open(input_path, "rb") as audio_file:
                 output = replicate.run(
-                    "cjwbw/demucs:25a7d3c68380155b1f50a16c7cfccf30f576e107df2a6fdf9a349bc9e5c54508",
+                    "cjwbw/demucs:23fc375626b9ef28277259163b469bcfec109968417fb6e138a3791a8e8b6b0c", # أو استخدام اسم النموذج المباشر
                     input={
                         "audio": audio_file,
                         "stem": "vocals",
