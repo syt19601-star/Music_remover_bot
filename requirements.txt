@@ -1,4 +1,6 @@
-pyTelegramBotAPI
-requests
+aiogram
+replicate
+aiohttp
 ffmpeg-python
 numpy
+requests
